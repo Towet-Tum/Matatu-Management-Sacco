@@ -17,17 +17,15 @@ class User(AbstractUser):
         'auth.Group',
         related_name="custom_user_set",
         blank=True,
-        help_text="The groups this user belongs to.",
-        verbose_name="groups",
     )
     user_permissions = models.ManyToManyField(
         'auth.Permission',
         related_name="custom_user_set",
         blank=True,
-        help_text="Specific permissions for this user.",
-        verbose_name="user permissions",
     )
-#Route Model
+
+
+# Route Model
 class Route(models.Model):
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True, null=True)
@@ -44,7 +42,8 @@ class MatatuOwner(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.user.username} - Owner"
+        return self.user.username
+
 
 # Matatu Model
 class Matatu(models.Model):
@@ -52,14 +51,15 @@ class Matatu(models.Model):
     route = models.ForeignKey(Route, on_delete=models.SET_NULL, null=True, blank=True, related_name='matatus')
     capacity = models.PositiveIntegerField()
     owner = models.ForeignKey(MatatuOwner, on_delete=models.CASCADE, related_name='matatus')
-    licence_expiry_date = models.DateField()  # Added expiry date for Matatu license
+    licence_expiry_date = models.DateField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     def is_licence_expired(self):
         return self.licence_expiry_date < now().date()
 
     def __str__(self):
-        return f"{self.registration_number} - {self.route.name if self.route else 'No Route'}"
+        return self.registration_number
+
 
 # Manager Model
 class Manager(models.Model):
@@ -69,35 +69,37 @@ class Manager(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.user.username} - Manager"
+        return self.user.username
+
 
 # Driver Model
 class Driver(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='driver_profile')
     phone_number = models.CharField(max_length=15)
     assigned_matatu = models.OneToOneField(Matatu, on_delete=models.SET_NULL, null=True, blank=True, related_name='driver')
-    licence_expiry_date = models.DateField()  # Added expiry date for Driver's license
+    licence_expiry_date = models.DateField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     def is_licence_expired(self):
         return self.licence_expiry_date < now().date()
 
     def __str__(self):
-        return f"{self.user.username} - Driver"
+        return self.user.username
+
 
 # Conductor Model
 class Conductor(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='conductor_profile')
     phone_number = models.CharField(max_length=15)
     assigned_driver = models.OneToOneField(Driver, on_delete=models.SET_NULL, null=True, blank=True, related_name='conductor')
-    licence_expiry_date = models.DateField()  # Added expiry date for Conductor's license
+    licence_expiry_date = models.DateField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     def is_licence_expired(self):
         return self.licence_expiry_date < now().date()
 
     def __str__(self):
-        return f"{self.user.username} - Conductor"
+        return self.user.username
 
 
 # Revenue Model
@@ -106,6 +108,10 @@ class Revenue(models.Model):
     amount_collected = models.DecimalField(max_digits=10, decimal_places=2)
     date = models.DateField(auto_now_add=True, db_index=True)
     logged_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='revenue_logs')
+
+    class Meta:
+        unique_together = ('matatu', 'date')
+        ordering = ['-date']
 
     def __str__(self):
         return f"{self.matatu.registration_number} - {self.amount_collected}"
@@ -120,8 +126,12 @@ class Expense(models.Model):
     date = models.DateField(auto_now_add=True, db_index=True)
     logged_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='expense_logs')
 
+    class Meta:
+        ordering = ['-date']
+
     def __str__(self):
-        return f"{self.matatu.registration_number} - {self.expense_type} - {self.amount}"
+        return f"{self.matatu.registration_number} - {self.expense_type}"
+
 
 # Payment Model
 class Payment(models.Model):
@@ -130,5 +140,37 @@ class Payment(models.Model):
     payment_type = models.CharField(max_length=50)
     date = models.DateField()
 
+    class Meta:
+        ordering = ['-date']
+
     def __str__(self):
         return f"Payment to {self.receiver.username} - {self.amount}"
+
+
+# Matatu Route Revenue Model
+class MatatuRouteRevenue(models.Model):
+    matatu = models.ForeignKey(Matatu, on_delete=models.CASCADE, related_name='route_revenues')
+    route = models.ForeignKey(Route, on_delete=models.CASCADE, related_name='matatu_revenues')
+    revenue_collected = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    date = models.DateField(default=now, db_index=True)
+
+    class Meta:
+        unique_together = ('matatu', 'route', 'date')
+        ordering = ['-date']
+
+    def __str__(self):
+        return f"{self.matatu.registration_number} - {self.route.name} - {self.date}"
+
+
+# Route Revenue Model
+class RouteRevenue(models.Model):
+    route = models.ForeignKey(Route, on_delete=models.CASCADE, related_name='route_revenues')
+    total_revenue = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    date = models.DateField(default=now, db_index=True)
+
+    class Meta:
+        unique_together = ('route', 'date')
+        ordering = ['-date']
+
+    def __str__(self):
+        return f"{self.route.name} - {self.total_revenue}"
